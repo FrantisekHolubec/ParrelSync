@@ -1,5 +1,4 @@
 ﻿using System.IO;
-using UnityEngine;
 
 namespace ParrelSync
 {
@@ -7,13 +6,11 @@ namespace ParrelSync
     {
         public static bool IsFileLocked(string path)
         {
-            FileInfo file = new FileInfo(path);
+            var file = new FileInfo(path);
             try
             {
-                using (FileStream stream = file.Open(FileMode.Open, FileAccess.Read, FileShare.None))
-                {
-                    stream.Close();
-                }
+                using var stream = file.Open(FileMode.Open, FileAccess.Read, FileShare.None);
+                stream.Close();
             }
             catch (IOException)
             {

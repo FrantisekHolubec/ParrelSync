@@ -10,13 +10,33 @@ namespace ParrelSync
     public class ParrelSyncProjectSettings : ScriptableObject
     {
         private const string ParrelSyncScriptableObjectsDirectory = "Assets/Plugins/ParrelSync/ScriptableObjects";
-        private const string ParrelSyncSettingsPath = ParrelSyncScriptableObjectsDirectory + "/" +
-                                                       nameof(ParrelSyncProjectSettings) + ".asset";
+        private const string ParrelSyncSettingsPath = ParrelSyncScriptableObjectsDirectory + "/" + nameof(ParrelSyncProjectSettings) + ".asset";
 
-        [SerializeField]
-        [HideInInspector]
-        private List<string> m_OptionalSymbolicLinkFolders;
-        public const string NameOfOptionalSymbolicLinkFolders = nameof(m_OptionalSymbolicLinkFolders);
+        [SerializeField, HideInInspector] private bool assetModPref = true;
+        [SerializeField, HideInInspector] private bool copyPackagesFolders;
+        [SerializeField, HideInInspector] private bool alsoCheckUnityLockFileStaPref = true;
+        [SerializeField, HideInInspector] private List<string> optionalSymbolicLinkFolders;
+
+        public List<string> OptionalSymbolicLinkFolders
+            => optionalSymbolicLinkFolders;
+
+        public bool AssetModPref
+        {
+            get => assetModPref;
+            set => assetModPref = value;
+        }
+
+        public bool AlsoCheckUnityLockFileStaPref
+        {
+            get => alsoCheckUnityLockFileStaPref;
+            set => alsoCheckUnityLockFileStaPref = value;
+        }
+
+        public bool CopyPackagesFolders
+        {
+            get => copyPackagesFolders;
+            set => copyPackagesFolders = value;
+        }
 
         private static ParrelSyncProjectSettings GetOrCreateSettings()
         {
@@ -26,38 +46,35 @@ namespace ParrelSync
                 projectSettings = AssetDatabase.LoadAssetAtPath<ParrelSyncProjectSettings>(ParrelSyncSettingsPath);
 
                 if (projectSettings == null)
+                {
                     Debug.LogError("File Exists, but failed to load: " + ParrelSyncSettingsPath);
+                }
 
                 return projectSettings;
             }
 
             projectSettings = CreateInstance<ParrelSyncProjectSettings>();
-            projectSettings.m_OptionalSymbolicLinkFolders = new List<string>();
+            projectSettings.optionalSymbolicLinkFolders = new List<string>();
+
             if (!Directory.Exists(ParrelSyncScriptableObjectsDirectory))
             {
                 Directory.CreateDirectory(ParrelSyncScriptableObjectsDirectory);
             }
+
             AssetDatabase.CreateAsset(projectSettings, ParrelSyncSettingsPath);
             AssetDatabase.SaveAssets();
             return projectSettings;
         }
 
-        public static SerializedObject GetSerializedSettings()
-        {
-            return new SerializedObject(GetOrCreateSettings());
-        }
+        public static ParrelSyncProjectSettings GetSerializedSettings()
+            => GetOrCreateSettings();
     }
 
     public class ParrelSyncSettingsProvider : SettingsProvider
     {
         private const string MenuLocationInProjectSettings = "Project/ParrelSync";
 
-        private SerializedObject _parrelSyncProjectSettings;
-
-        private class Styles
-        {
-            public static readonly GUIContent SymlinkSectionHeading = new GUIContent("Optional Folders to Symbolically Link");
-        }
+        private ParrelSyncProjectSettings _settings;
 
         private ParrelSyncSettingsProvider(string path, SettingsScope scope = SettingsScope.User)
             : base(path, scope)
@@ -67,74 +84,117 @@ namespace ParrelSync
         public override void OnActivate(string searchContext, VisualElement rootElement)
         {
             // This function is called when the user clicks on the ParrelSyncSettings element in the Settings window.
-            _parrelSyncProjectSettings = ParrelSyncProjectSettings.GetSerializedSettings();
+            _settings = ParrelSyncProjectSettings.GetSerializedSettings();
         }
 
         public override void OnGUI(string searchContext)
         {
-            var property = _parrelSyncProjectSettings.FindProperty(ParrelSyncProjectSettings.NameOfOptionalSymbolicLinkFolders);
-            if (property is null || !property.isArray || property.arrayElementType != "string")
-                return;
-
-            var optionalFolderPaths = new List<string>(property.arraySize);
-            for (var i = 0; i < property.arraySize; ++i)
+            if (ClonesManager.IsClone())
             {
-                optionalFolderPaths.Add(property.GetArrayElementAtIndex(i).stringValue);
+                EditorGUILayout.HelpBox(
+                    "This is a clone project. Please use the original project editor to change preferences.",
+                    MessageType.Info);
+
+                return;
             }
-            optionalFolderPaths.Add("");
+
+            GUILayout.BeginVertical("HelpBox");
+            GUILayout.BeginVertical("GroupBox");
+
+            _settings.AssetModPref = EditorGUILayout.ToggleLeft(
+                new GUIContent(
+                    "(recommended) Disable asset saving in clone editors- require re-open clone editors",
+                    "Disable asset saving in clone editors so all assets can only be modified from the original project editor"
+                ),
+                _settings.AssetModPref);
+
+            _settings.CopyPackagesFolders = EditorGUILayout.ToggleLeft(
+                new GUIContent(
+                    "CopyPackagesFolders",
+                    "CopyPackagesFolders"
+                ),
+                _settings.CopyPackagesFolders);
+
+            if (Application.platform == RuntimePlatform.WindowsEditor)
+            {
+                _settings.AlsoCheckUnityLockFileStaPref = EditorGUILayout.ToggleLeft(
+                    new GUIContent(
+                        "Also check UnityLockFile lock status while checking clone projects running status",
+                        "Disable this can slightly increase Clones Manager window performance, but will lead to in-correct clone project running status"
+                        + "(the Clones Manager window show the clone project is still running even it's not) if the clone editor crashed"
+                    ),
+                    _settings.AlsoCheckUnityLockFileStaPref);
+            }
+
+            GUILayout.EndVertical();
+
+            var symbolicLinkFolders = _settings.OptionalSymbolicLinkFolders;
+            var optionalFolders = new List<string>(symbolicLinkFolders) { string.Empty };
 
             GUILayout.BeginVertical("GroupBox");
-            GUILayout.Label(Styles.SymlinkSectionHeading);
+            GUILayout.Label(new GUIContent("Optional Folders to Symbolically Link"));
             GUILayout.Space(5);
+
             var projectPath = ClonesManager.GetCurrentProjectPath();
-            var optionalFolderPathsIsDirty = false;
-            for (var i = 0; i < optionalFolderPaths.Count; ++i)
+            var isDirty = false;
+            for (var i = 0; i < optionalFolders.Count; ++i)
             {
                 GUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField(optionalFolderPaths[i], EditorStyles.textField, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+                EditorGUILayout.LabelField(optionalFolders[i], EditorStyles.textField, GUILayout.Height(EditorGUIUtility.singleLineHeight));
                 if (GUILayout.Button("Select", GUILayout.Width(60)))
                 {
                     var result = EditorUtility.OpenFolderPanel("Select Folder to Symbolically Link...", "", "");
                     if (result.Contains(projectPath))
                     {
-                        optionalFolderPaths[i] = result.Replace(projectPath, "");
-                        optionalFolderPathsIsDirty = true;
+                        optionalFolders[i] = result.Replace(projectPath, "");
+                        isDirty = true;
                     }
                     else if (result != "")
                     {
                         Debug.LogWarning("Symbolic Link folder must be within the project directory");
                     }
                 }
+
                 if (GUILayout.Button("Clear", GUILayout.Width(60)))
                 {
-                    optionalFolderPaths[i] = "";
-                    optionalFolderPathsIsDirty = true;
+                    optionalFolders[i] = "";
+                    isDirty = true;
                 }
+
                 GUILayout.EndHorizontal();
             }
+
             GUILayout.EndVertical();
 
-            if (!optionalFolderPathsIsDirty)
-                return;
-
-            optionalFolderPaths.RemoveAll(str => str == "");
-            property.arraySize = optionalFolderPaths.Count;
-            for (var i = 0; i < property.arraySize; ++i)
+            if (isDirty)
             {
-                property.GetArrayElementAtIndex(i).stringValue = optionalFolderPaths[i];
+                optionalFolders.RemoveAll(string.IsNullOrEmpty);
+                symbolicLinkFolders.Clear();
+                symbolicLinkFolders.AddRange(optionalFolders);
             }
-            _parrelSyncProjectSettings.ApplyModifiedProperties();
-            AssetDatabase.SaveAssets();
+
+            if (GUILayout.Button("Reset to default"))
+            {
+                _settings.AssetModPref = true;
+                _settings.CopyPackagesFolders = false;
+                _settings.AlsoCheckUnityLockFileStaPref = true;
+                _settings.OptionalSymbolicLinkFolders.Clear();
+
+                Debug.Log("Editor preferences cleared");
+            }
+
+            GUILayout.EndVertical();
+
+            if (isDirty)
+            {
+                EditorUtility.SetDirty(_settings);
+                AssetDatabase.SaveAssets();
+            }
         }
 
         // Register the SettingsProvider
         [SettingsProvider]
         public static SettingsProvider CreateParrelSyncSettingsProvider()
-        {
-            return new ParrelSyncSettingsProvider(MenuLocationInProjectSettings, SettingsScope.Project)
-            {
-                keywords = GetSearchKeywordsFromGUIContentProperties<Styles>()
-            };
-        }
+            => new ParrelSyncSettingsProvider(MenuLocationInProjectSettings, SettingsScope.Project);
     }
 }
