@@ -511,6 +511,55 @@ namespace ParrelSync
             return projectsPath;
         }
 
+        private static readonly HashSet<string> ignoredFolders = new HashSet<string>
+        {
+            "BuildReports",
+            "Demo",
+            "Examples",
+            "Samples",
+            "Tests",
+        };
+
+        private static readonly HashSet<string> ignoredLibraryFolders = new HashSet<string>
+        {
+            "Artifacts",
+            "Bee",
+            "BuildPlayerData",
+            "BurstCache",
+            "PlayerDataCache",
+            "Search",
+            "ShaderCache",
+            "SplashScreenCache",
+            "StateCache",
+            "TempArtifacts",
+            "VP",
+        };
+
+        private static readonly HashSet<string> ignoredFiles = new HashSet<string>
+        {
+            ".DS_Store",
+            "Thumbs.db",
+            "Desktop.ini",
+            "Samples.meta",
+            "Examples.meta",
+            "Tests.meta",
+        };
+
+        private static readonly HashSet<string> ignoredExtensions = new HashSet<string>
+        {
+            ".md",
+            ".log",
+            ".pdf",
+            ".backup",
+            ".pid",
+            ".zip",
+            ".tar",
+            ".tar.gz",
+            ".csproj",
+            ".unitypackage",
+            ".buildreport",
+        };
+
         /// <summary>
         /// Copies directory located at sourcePath to destinationPath. Displays a progress bar.
         /// </summary>
@@ -563,78 +612,14 @@ namespace ParrelSync
                 Directory.CreateDirectory(destination.FullName);
             }
 
-            var ignoredFolders = new HashSet<string>
-            {
-                "BuildReports",
-                "Demo",
-                "Examples",
-                "Samples",
-                "Tests",
-            };
-
-            var ignoredLibraryFolders = new HashSet<string>
-            {
-                "Artifacts",
-                "Bee",
-                "BuildPlayerData",
-                "BurstCache",
-                "PlayerDataCache",
-                "Search",
-                "ShaderCache",
-                "SplashScreenCache",
-                "StateCache",
-                "TempArtifacts",
-                "VP",
-            };
-
-            var ignoredFiles = new HashSet<string>
-            {
-                ".DS_Store",
-                "Thumbs.db",
-                "Desktop.ini",
-                "Samples.meta",
-                "Examples.meta",
-                "Tests.meta",
-            };
-
-            var ignoredExtensions = new HashSet<string>
-            {
-                ".md",
-                ".log",
-                ".pdf",
-                ".backup",
-                ".pid",
-                ".zip",
-                ".tar",
-                ".tar.gz",
-                ".csproj",
-                ".unitypackage",
-                ".buildreport",
-            };
+            // Package cache content is compiled as-is, so name-based filters must not touch it.
+            var isPackageCache = IsInsidePackageCache(source);
 
             // Copy all files from the source.
             foreach (var file in source.GetFiles())
             {
-                // Ensure file exists before continuing.
                 var fileName = file.Name;
-                if (!file.Exists
-                    || ignoredFiles.Contains(fileName)
-                    || ignoredExtensions.Contains(file.Extension))
-                {
-                    continue;
-                }
-
-                var ignoredExtension = false;
-                foreach (var extension in ignoredExtensions)
-                {
-                    if (file.FullName.EndsWith($"{extension}.meta", StringComparison.OrdinalIgnoreCase))
-                    {
-                        ignoredExtension = true;
-                        break;
-                    }
-                }
-
-                if (ignoredExtension)
+                if (!file.Exists || (!isPackageCache && IsIgnoredFile(file)))
                 {
                     continue;
                 }
@@ -673,7 +658,7 @@ namespace ParrelSync
             {
                 var folderName = sourceNestedDir.Name;
                 if (folderName.EndsWith('~')
-                    || ignoredFolders.Contains(folderName)
+                    || (!isPackageCache && ignoredFolders.Contains(folderName))
                     || (sourceNestedDir.Parent is { Name: "Library" }
                         && sourceNestedDir.Parent.FullName == $"{projectPath}/Library"
                         && ignoredLibraryFolders.Contains(folderName)))
@@ -686,6 +671,31 @@ namespace ParrelSync
                     sourceNestedDir, nextDestinationNestedDir,
                     ref totalBytes, ref copiedBytes, progressBarPrefix);
             }
+        }
+
+        private static bool IsInsidePackageCache(DirectoryInfo directory)
+        {
+            var packageCachePath = Path.GetFullPath(Path.Combine(GetCurrentProjectPath(), "Library", "PackageCache"));
+            var path = Path.GetFullPath(directory.FullName);
+            return path.StartsWith(packageCachePath, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsIgnoredFile(FileInfo file)
+        {
+            if (ignoredFiles.Contains(file.Name) || ignoredExtensions.Contains(file.Extension))
+            {
+                return true;
+            }
+
+            foreach (var extension in ignoredExtensions)
+            {
+                if (file.FullName.EndsWith($"{extension}.meta", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
