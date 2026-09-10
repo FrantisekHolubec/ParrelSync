@@ -104,14 +104,29 @@ namespace ParrelSync
 
             CreateProjectFolder(cloneProject);
 
+            var projectSettings = ParrelSyncProjectSettings.GetSerializedSettings();
+
             // Link Folders
             LinkFolders(sourceProject.assetPath, cloneProject.assetPath);
-            LinkFolders(sourceProject.projectSettingsPath, cloneProject.projectSettingsPath);
             LinkFolders(sourceProject.autoBuildPath, cloneProject.autoBuildPath);
             LinkFolders(sourceProject.localPackages, cloneProject.localPackages);
 
+            if (projectSettings.IsolatePlayerPrefs && ProjectSettingsIsolation.CanIsolate(sourceProject.projectPath))
+            {
+                Debug.Log("ProjectSettings copy with isolated PlayerPrefs: " + cloneProject.projectSettingsPath);
+                ProjectSettingsIsolation.Sync(sourceProject.projectPath, cloneProject.projectPath);
+            }
+            else
+            {
+                if (projectSettings.IsolatePlayerPrefs)
+                {
+                    Debug.LogWarning("ParrelSync: PlayerPrefs isolation needs text serialized ProjectSettings.asset. Linking ProjectSettings instead.");
+                }
+
+                LinkFolders(sourceProject.projectSettingsPath, cloneProject.projectSettingsPath);
+            }
+
             // Optional Link Folders
-            var projectSettings = ParrelSyncProjectSettings.GetSerializedSettings();
             var optionalLinkPaths = projectSettings.OptionalSymbolicLinkFolders;
 
             foreach (var path in optionalLinkPaths)
@@ -187,6 +202,11 @@ namespace ParrelSync
                 // Validate (and update if needed) the "Packages" folder before opening clone project to ensure the clone project will have the
                 // same "compiling environment" as the original project
                 ValidateCopiedFoldersIntegrity.ValidateFolder(projectPath, GetOriginalProjectPath(), "Packages");
+            }
+
+            if (ProjectSettingsIsolation.IsIsolated(projectPath))
+            {
+                ProjectSettingsIsolation.Sync(GetOriginalProjectPath(), projectPath);
             }
 
             var fileName = GetApplicationPath();

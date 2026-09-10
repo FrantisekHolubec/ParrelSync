@@ -15,6 +15,7 @@ namespace ParrelSync
         [SerializeField, HideInInspector] private bool assetModPref = true;
         [SerializeField, HideInInspector] private bool copyPackagesFolders;
         [SerializeField, HideInInspector] private bool alsoCheckUnityLockFileStaPref = true;
+        [SerializeField, HideInInspector] private bool isolatePlayerPrefs;
         [SerializeField, HideInInspector] private List<string> optionalSymbolicLinkFolders;
 
         public List<string> OptionalSymbolicLinkFolders
@@ -36,6 +37,12 @@ namespace ParrelSync
         {
             get => copyPackagesFolders;
             set => copyPackagesFolders = value;
+        }
+
+        public bool IsolatePlayerPrefs
+        {
+            get => isolatePlayerPrefs;
+            set => isolatePlayerPrefs = value;
         }
 
         private static ParrelSyncProjectSettings GetOrCreateSettings()
@@ -115,6 +122,14 @@ namespace ParrelSync
                 ),
                 _settings.CopyPackagesFolders);
 
+            _settings.IsolatePlayerPrefs = EditorGUILayout.ToggleLeft(
+                new GUIContent(
+                    "Isolate PlayerPrefs in clones - requires re-creating clones",
+                    "Copies ProjectSettings into each clone with a per-clone product name, so PlayerPrefs and persistentDataPath are separate from the original. "
+                    + "The copy is re-synced when the clone is opened, gains focus, enters play mode or reloads scripts, and when the original reloads scripts."
+                ),
+                _settings.IsolatePlayerPrefs);
+
             if (Application.platform == RuntimePlatform.WindowsEditor)
             {
                 _settings.AlsoCheckUnityLockFileStaPref = EditorGUILayout.ToggleLeft(
@@ -177,6 +192,7 @@ namespace ParrelSync
             {
                 _settings.AssetModPref = true;
                 _settings.CopyPackagesFolders = false;
+                _settings.IsolatePlayerPrefs = false;
                 _settings.AlsoCheckUnityLockFileStaPref = true;
                 _settings.OptionalSymbolicLinkFolders.Clear();
 

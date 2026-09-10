@@ -124,6 +124,15 @@ namespace ParrelSync
 
                     GUILayout.EndHorizontal();
 
+                    var isPlayerPrefsIsolated = ProjectSettingsIsolation.IsIsolated(cloneProjectPath);
+                    EditorGUILayout.LabelField("PlayerPrefs", isPlayerPrefsIsolated ? "Isolated" : "Shared with original");
+                    if (isPlayerPrefsIsolated != projectSettings.IsolatePlayerPrefs)
+                    {
+                        EditorGUILayout.HelpBox(
+                            "PlayerPrefs isolation setting changed. Delete and re-create this clone to apply it.",
+                            MessageType.Warning);
+                    }
+
                     GUILayout.BeginHorizontal();
                     EditorGUILayout.LabelField("Arguments", GUILayout.Width(70));
                     if (GUILayout.Button("?", GUILayout.Width(20)))
@@ -194,6 +203,11 @@ namespace ParrelSync
                         }
 
                         GUILayout.EndHorizontal();
+                    }
+
+                    if (isPlayerPrefsIsolated && GUILayout.Button("Sync Project Settings"))
+                    {
+                        ProjectSettingsIsolation.Sync(ClonesManager.GetOriginalProjectPath(), cloneProjectPath);
                     }
 
                     GUILayout.EndVertical();

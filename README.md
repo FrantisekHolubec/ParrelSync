@@ -70,6 +70,8 @@ Check out [the doc](https://github.com/VeriorPies/ParrelSync/wiki/List-of-APIs) 
 ## How does it work?
 For each clone instance, ParrelSync will make a copy of the original project folder and reference the ```Asset```, ```Packages``` and ```ProjectSettings``` folder back to the original project with [symbolic link](https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/mklink). Other folders such as ```Library```, ```Temp```, and ```obj``` will remain independent for each clone project.
 
+Clones share ```PlayerPrefs``` and ```persistentDataPath``` with the original project because they share the same company and product name. Enable **Isolate PlayerPrefs in clones** in *Project Settings > ParrelSync* to give each clone a copy of ```ProjectSettings``` with a per-clone product name (e.g. ```MyGame_clone_0```) instead of a link. The copy is re-synced from the original when the clone is opened, gains focus, enters play mode or reloads scripts, when the original reloads scripts, or manually with the *Sync Project Settings* button. Existing clones must be re-created for the setting to take effect.
+
 All clones are placed right next to the original project with suffix *```_clone_x```*, which will be something like this in the folder hierarchy. 
 ```
 /ProjectName
