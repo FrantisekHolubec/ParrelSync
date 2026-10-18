@@ -190,7 +190,7 @@ namespace ParrelSync
                 return;
             }
 
-            if (projectPath == GetCurrentProjectPath())
+            if (IsSamePath(projectPath, GetCurrentProjectPath()))
             {
                 Debug.LogError("Cannot open the project - it is already open.");
                 return;
@@ -269,8 +269,8 @@ namespace ParrelSync
         {
             // Clone won't be able to delete itself.
             if (IsClone()
-                || cloneProjectPath == string.Empty
-                || cloneProjectPath == GetOriginalProjectPath())
+                || string.IsNullOrEmpty(cloneProjectPath)
+                || IsSamePath(cloneProjectPath, GetCurrentProjectPath()))
             {
                 return;
             }
@@ -319,7 +319,7 @@ namespace ParrelSync
             }
 
             var sourceProjectPath = GetOriginalProjectPath();
-            if (cloneProjectPath == sourceProjectPath)
+            if (IsSamePath(cloneProjectPath, sourceProjectPath))
             {
                 return;
             }
@@ -520,9 +520,9 @@ namespace ParrelSync
             "Tests",
         };
 
+        // Artifacts stay, the copied ArtifactDB points at them and the clone would reimport everything
         private static readonly HashSet<string> ignoredLibraryFolders = new HashSet<string>
         {
-            "Artifacts",
             "Bee",
             "BuildPlayerData",
             "BurstCache",
@@ -650,19 +650,22 @@ namespace ParrelSync
                 }
             }
 
-            // TODO sync addressables build folder
-
-            var projectPath = GetCurrentProjectPath();
+            var isLibraryRoot = IsLibraryRoot(source);
             // Copy all nested directories from the source.
             foreach (var sourceNestedDir in source.GetDirectories())
             {
                 var folderName = sourceNestedDir.Name;
                 if (folderName.EndsWith('~')
-                    || (!isPackageCache && ignoredFolders.Contains(folderName))
-                    || (sourceNestedDir.Parent is { Name: "Library" }
-                        && sourceNestedDir.Parent.FullName == $"{projectPath}/Library"
-                        && ignoredLibraryFolders.Contains(folderName)))
+                    || (isLibraryRoot && ignoredLibraryFolders.Contains(folderName)))
                 {
+                    continue;
+                }
+
+                if (!isPackageCache && ignoredFolders.Contains(folderName))
+                {
+                    // Addressables writes build reports into an existing folder, keep it empty
+                    if (folderName == "BuildReports")
+                        destination.CreateSubdirectory(folderName);
                     continue;
                 }
 
@@ -680,16 +683,34 @@ namespace ParrelSync
             return path.StartsWith(packageCachePath, StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsSamePath(string a, string b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b))
+                return false;
+
+            var separators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+            return string.Equals(Path.GetFullPath(a).TrimEnd(separators), Path.GetFullPath(b).TrimEnd(separators), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsLibraryRoot(DirectoryInfo directory)
+        {
+            var libraryPath = Path.GetFullPath(Path.Combine(GetCurrentProjectPath(), "Library"));
+            var path = Path.GetFullPath(directory.FullName).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return string.Equals(path, libraryPath, StringComparison.OrdinalIgnoreCase);
+        }
+
         private static bool IsIgnoredFile(FileInfo file)
         {
-            if (ignoredFiles.Contains(file.Name) || ignoredExtensions.Contains(file.Extension))
+            if (ignoredFiles.Contains(file.Name))
             {
                 return true;
             }
 
+            // Name check, covers .tar.gz and any letter case
             foreach (var extension in ignoredExtensions)
             {
-                if (file.FullName.EndsWith($"{extension}.meta", StringComparison.OrdinalIgnoreCase))
+                if (file.Name.EndsWith(extension, StringComparison.OrdinalIgnoreCase)
+                    || file.Name.EndsWith($"{extension}.meta", StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
